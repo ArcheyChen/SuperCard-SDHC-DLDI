@@ -80,7 +80,7 @@ static bool isSDHC=false;
 //---------------------------------------------------------------
 // Internal SC SD functions
 
-extern bool _SCSD_writeData_s (uint8_t *data, uint16_t* crc);
+// extern bool _SCSD_writeData_s (uint8_t *data, uint16_t* crc);
 
 inline void _SCSD_unlock (void) {
 	_SC_changeMode (SC_MODE_MEDIA);	
@@ -88,6 +88,83 @@ inline void _SCSD_unlock (void) {
 
 static inline void _SCSD_enable_lite (void) {
 	REG_SCSD_LITE_ENABLE = 0;
+}
+
+//convert from asm by Ausar
+static bool _SCSD_writeData_sc(uint16_t* dataU16, uint16_t* crc) {
+    volatile uint32_t temp;
+    int i = BUSY_WAIT_TIMEOUT;
+    volatile uint16_t* reg_scsd_datawrite_u16 = (volatile uint16_t*)(0x09000000);
+    volatile uint32_t* reg_scsd_datawrite_u32 = (volatile uint32_t*)(0x09000000);
+
+    // Wait for a free data buffer on the SD card
+	while(i--){
+		if(((*reg_scsd_datawrite_u16) & SCSD_STS_BUSY) == 0)
+			break;
+	}
+    if (i == 0) {
+		// printf("\nbegin timeout\n");
+        return false; // Timeout
+    }else{
+		// printf("\nbein wait OK\n");
+		// return true;
+	}
+	temp = *reg_scsd_datawrite_u16;
+    // Start bit
+    *reg_scsd_datawrite_u16 = 0x00;
+
+    // Write the data to the card
+	
+	int BYTES_PER_READ_DIV_2 = BYTES_PER_READ/2;
+	my_SCSD_writeData_data_loop:
+	if((uintptr_t)(dataU16) & 1){
+		while(BYTES_PER_READ_DIV_2--){
+			uint8_t* dataU8 = (uint8_t*)dataU16;
+			uint32_t byte1 = *dataU8++; // 读取第一个字节
+			uint32_t byte2 = *dataU8++; // 读取第二个字节
+			byte1 = byte1 | (byte2 << 8); // 合并两个字节成为一个16位数
+			*reg_scsd_datawrite_u32 = byte1;
+			*(reg_scsd_datawrite_u32+1) = byte2;
+			// *reg_scsd_datawrite_u32 = byte2;// the asm is using stmia, so the addr will ++, but I think is fine to keep origin addr?
+		}
+
+	}else{
+		// printf("\naligned\n");
+		while(BYTES_PER_READ_DIV_2--){
+			//一次需要发送4个u16
+			//如果是普通的SC卡，那么只需要第一个U16有数据就行
+			//SC Lite则需要分4个部分发送,每个U16的U4有数据
+			temp = *dataU16++;
+			temp += (temp << 20);// |X_U16|  |U4_00|U4_01|U4_02|U4_03| >>|U4_01|U4_02|U4_03|U4_XX| |U4_00|U4_01|U4_02|U4_03|
+			*reg_scsd_datawrite_u32 = temp;
+			*(reg_scsd_datawrite_u32+1) = (temp >> 8);// |U4_XX|U4_00|U4_01|U4_02| |U4_XX|U4_00|U4_01|U4_02|
+		}
+	}
+	if(crc){
+		dataU16 = crc;
+		crc = 0;
+		BYTES_PER_READ_DIV_2 = 4;//发送4个u16
+		goto my_SCSD_writeData_data_loop;
+	}
+
+    *reg_scsd_datawrite_u16 = 0xFF;
+
+    // Wait for the SD card to signal that it is finished receiving
+    i = BUSY_WAIT_TIMEOUT;
+    while (((*reg_scsd_datawrite_u16) & SCSD_STS_BUSY) && (--i));
+    if (i <= 0) {
+		// printf("\nend wait timeout\n");
+        return false; // Timeout
+    }else{
+		// printf("\n end wait OK\n");
+	}
+
+    // Send 8 more clocks, as required by the SD card
+    for (i = 0; i < 8; i++) {
+        temp = *reg_scsd_datawrite_u32;
+    }
+
+    return true;
 }
 
 static bool _SCSD_sendCommand (uint8_t command, uint32_t argument) {
@@ -348,7 +425,7 @@ bool _SCSD_writeSectors (uint32_t sector, uint32_t numSectors, const void* buffe
 		}
 
 		// Send the data and CRC
-		if (! _SCSD_writeData_s (data, crc)) {
+		if (! _SCSD_writeData_sc ((uint16_t*)data, crc)) {
 			return false;
 		}
 			

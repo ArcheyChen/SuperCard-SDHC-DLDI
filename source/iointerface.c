@@ -42,72 +42,33 @@
  #define NULL 0
 #endif
 
-#include "io_scsd.h"
-/*-----------------------------------------------------------------
-startUp
-Initialize the interface, geting it into an idle, ready state
-returns true if successful, otherwise returns false
------------------------------------------------------------------*/
+#include "scsd/new_scsdio.h"
 bool startup(void) {
-	return _SCSD_startUp();
-}
-
-/*-----------------------------------------------------------------
-isInserted
-Is a card inserted?
-return true if a card is inserted and usable
------------------------------------------------------------------*/
-bool isInserted (void) {
+	// return _SCSD_startUp();
+    // sc_InitSCMode();
     return true;
-    // return _SCSD_isInserted();
 }
 
+bool isInserted (void) {
+    sc_MemoryCard_IsInserted();
+    return true;
+}
 
-/*-----------------------------------------------------------------
-clearStatus
-Reset the card, clearing any status errors
-return true if the card is idle and ready
------------------------------------------------------------------*/
+// extern  bool clearStatus (void);
 bool clearStatus (void) {
-    _SCSD_unlock();
-    return _SCSD_clearStatus();
+    return true;
 }
-
-
-/*-----------------------------------------------------------------
-readSectors
-Read "numSectors" 512-byte sized sectors from the card into "buffer", 
-starting at "sector". 
-The buffer may be unaligned, and the driver must deal with this correctly.
-return true if it was successful, false if it failed for any reason
------------------------------------------------------------------*/
 bool readSectors (u32 sector, u32 numSectors, void* buffer) {
-    _SCSD_unlock();
-    return _SCSD_readSectors(sector,numSectors,buffer);
+    sc_ReadSector(buffer,sector,numSectors);
+    return true;
 }
 
 
-
-/*-----------------------------------------------------------------
-writeSectors
-Write "numSectors" 512-byte sized sectors from "buffer" to the card, 
-starting at "sector".
-The buffer may be unaligned, and the driver must deal with this correctly.
-return true if it was successful, false if it failed for any reason
------------------------------------------------------------------*/
 bool writeSectors (u32 sector, u32 numSectors, void* buffer) {
-    _SCSD_unlock();
-    return _SCSD_writeSectors(sector,numSectors,buffer);
+    sc_WriteSector(buffer,sector,numSectors);
+    return true;
 }
-
-/*-----------------------------------------------------------------
-shutdown
-shutdown the card, performing any needed cleanup operations
-Don't expect this function to be called before power off, 
-it is merely for disabling the card.
-return true if the card is no longer active
------------------------------------------------------------------*/
 bool shutdown(void) {
-    _SCSD_unlock();
-    return _SCSD_shutdown();
+    clearStatus();
+    return true;
 }

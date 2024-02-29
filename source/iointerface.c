@@ -43,9 +43,9 @@
 #endif
 
 #include "scsd/new_scsdio.h"
-void call_starup();
-void startup(void) {
-    call_starup();
+bool startup(void) {
+    sc_mode(en_sdram + en_sdcard);
+    return sc_MemoryCard_IsInserted();
 }
 
 bool isInserted (void) {
@@ -67,6 +67,5 @@ bool writeSectors (u32 sector, u32 numSectors, void* buffer) {
     return true;
 }
 bool shutdown(void) {
-    clearStatus();
     return true;
 }

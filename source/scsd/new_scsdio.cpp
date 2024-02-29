@@ -26,6 +26,27 @@ void WriteSector(u16 *buff,u32 sector,u32 writenum)
     return;
 }
 
+void ReadSector(uint16_t *buff, uint32_t sector, uint8_t readnum) {
+
+    // First SDCommand call - setup command
+    SDCommand(0x12, 0, sector << 9); // R0 = 0x12, R1 = 0, R2 as calculated above
+
+    uint8_t i = 0;
+    while (i < readnum) {
+        sd_data_read_s((uint16_t*)(buff)); // Add R6, left shifted by 9, to R4 before casting
+        buff += 512/2;
+        i++;
+    }
+
+    // Final sequence of commands after reading sectors
+    SDCommand(0xC, 0, 0); // Command to presumably stop reading
+    get_resp(); // Get response from SD card
+    send_clk(0x10); // Send clock signal
+
+    // There's an implicit return here in the assembly, which cleans up the stack and returns
+    // This is handled automatically in C by reaching the end of the function
+}
+
 
 #define BUSY_WAIT_TIMEOUT 500000
 #define SCSD_STS_BUSY			0x100

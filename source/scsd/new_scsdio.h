@@ -24,6 +24,9 @@ extern void get_resp(void);
 extern void sd_crc16_s(u16* buff,u16 num,u16* crc16buff);
 extern u8 sd_crc7_s(u16* buff,u16 num);
 
+extern void sd_data_read_s(u16 *buff);
+extern void get_resp(void);
+
 void get_resp_drop();
 void send_clk(u32 num);
 void sc_mode(u16 data);
@@ -31,6 +34,7 @@ void sc_sdcard_reset(void);
 void SDCommand(u8 command,u8 num,u32 sector);
 void sd_data_write(u16 *buff,u16* crc16buff);
 void WriteSector(u16 *buff,u32 sector,u32 writenum);
+void ReadSector (u16 *buff,u32 sector,u8 readnum);
 #ifdef __cplusplus
 }
 #endif

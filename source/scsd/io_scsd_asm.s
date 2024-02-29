@@ -74,7 +74,7 @@ sd_data_write_loop2:
 
 @----------void sd_data_read_s(u16 *buff)-------------
     .ALIGN
-@    .GLOBAL sd_data_read_s	
+   .GLOBAL sd_data_read_s	
     .CODE 32
 sd_data_read_s:
 	stmfd   r13!,{r4}
@@ -443,7 +443,7 @@ POP             {R4-R6,PC}
 
 
 		.ALIGN
-@		.GLOBAL	 get_resp @ r0:Srcp r1:num ok
+		.GLOBAL	 get_resp @ r0:Srcp r1:num ok
 		.CODE 32
 get_resp:
 

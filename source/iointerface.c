@@ -57,7 +57,7 @@ bool clearStatus (void) {
     return true;
 }
 bool readSectors (u32 sector, u32 numSectors, void* buffer) {
-    sc_ReadSector(buffer,sector,numSectors);
+    ReadSector(buffer,sector,numSectors);
     return true;
 }
 

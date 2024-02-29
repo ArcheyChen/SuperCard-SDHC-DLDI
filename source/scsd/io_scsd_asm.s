@@ -131,7 +131,7 @@ sd_data_read_loop:
 
 @------void sd_crc16_s(u16* buff,u16 num,u16* crc16buff)
     .ALIGN
-@    .GLOBAL	sd_crc16_s 
+   .GLOBAL	sd_crc16_s 
     .CODE 32
 sd_crc16_s:
 	stmfd   r13!,{r4-r9}
@@ -208,7 +208,7 @@ sd_crc16_write_data:
 
 @------u8 sd_crc7_s(u16* buff,u16 num)----------------------------
     .ALIGN
-@    .GLOBAL	sd_crc7_s 
+   .GLOBAL	sd_crc7_s 
     .CODE 32
 sd_crc7_s:
 	stmfd   r13!,{r4}

@@ -63,7 +63,7 @@ bool readSectors (u32 sector, u32 numSectors, void* buffer) {
 
 
 bool writeSectors (u32 sector, u32 numSectors, void* buffer) {
-    sc_WriteSector(buffer,sector,numSectors);
+    WriteSector(buffer,sector,numSectors);
     return true;
 }
 bool shutdown(void) {

@@ -19,8 +19,8 @@
 @---------------------------------------------------------------------------------
 @ Text identifier - can be anything up to 47 chars + terminating null -- 48 bytes
 	.align	4
-	@ .asciz "SCSD-SDHC(By Ausar)"
-	.asciz "SuperCard (SD Card)"
+	.asciz "SCSD-SDHC(By Ausar)"
+	@ .asciz "SuperCard (SD Card)"
 	
 @---------------------------------------------------------------------------------
 @ Offsets to important sections within the data	-- 32 bytes

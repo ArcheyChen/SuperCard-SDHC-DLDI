@@ -43,15 +43,13 @@
 #endif
 
 #include "scsd/new_scsdio.h"
-bool startup(void) {
-	// return _SCSD_startUp();
-    // sc_InitSCMode();
-    return true;
+void call_starup();
+void startup(void) {
+    call_starup();
 }
 
 bool isInserted (void) {
-    sc_MemoryCard_IsInserted();
-    return true;
+    return sc_MemoryCard_IsInserted();
 }
 
 // extern  bool clearStatus (void);

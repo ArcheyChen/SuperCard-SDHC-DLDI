@@ -356,6 +356,37 @@ SDCommand:
 @		.GLOBAL	 ReadSector @ r0:Srcp r1:num ok
 		.CODE 32
 
+sc_ReadSector:
+PUSH            {R4-R6,LR}
+MOV             R4, R0
+MOV             R5, R2
+MOV             R2, R1,LSL#9
+MOV             R0, #0x12
+MOV             R1, #0
+BL              SDCommand
+MOV             R6, #0
+
+loc_658:
+CMP             R6, R5
+BGE             loc_674
+MOV             R0, R4
+ADD             R0, R0, R6,LSL#9
+BL              sd_data_read_s
+ADD             R6, R6, #1
+B               loc_658
+
+loc_674:
+MOV             R0, #0xC
+MOV             R1, #0
+MOV             R2, #0
+BL              SDCommand
+BL              get_resp
+MOV             R0, #0x10
+BL              send_clk
+MOV             R0, #1
+POP             {R4-R6,PC}
+@ End of function sc_ReadSector
+
 @void ReadSector(u16 *buff,u32 sector,u8 readnum)
 @{
 @	register u16 i,j;
@@ -372,40 +403,40 @@ SDCommand:
 @	send_clk(0x10);
 @
 @}
-sc_ReadSector:
-	stmfd   r13!,{r4-r6,r14}
+@ sc_ReadSector:
+@ 	stmfd   r13!,{r4-r6,r14}
 
-	mov	r4,r0
-	mov	r5,r2
-    mov r6,r1
-    mov r0,#en_sdcard
-    bl  sc_mode
+@ 	mov	r4,r0
+@ 	mov	r5,r2
+@     mov r6,r1
+@     mov r0,#en_sdcard
+@     bl  sc_mode
 
-    bl sc_sdcard_reset
-	mov	r2,r6,lsl #9
-	mov	r0,#18
-	mov	r1,#0
-	bl	SDCommand
-	mov	r6,#0
-beginforj_ReadSector:
-	cmp	r6,r5
-	bge	endforj_ReadSector
-	mov	r0,r4
-	add	r0,r0,r6,lsl #9 
-	bl	sd_data_read_s
-	add	r6,r6,#1
-	b	beginforj_ReadSector
-endforj_ReadSector:
-	mov	r0,#12
-	mov	r1,#0
-	mov	r2,#0
-	bl	SDCommand
-	bl	get_resp
-	mov	r0,#0x10
-	bl	send_clk
-	mov	r0,#1
-	ldmfd   r13!,{r4-r6,r15}
-@	bx	r14
+@     bl sc_sdcard_reset
+@ 	mov	r2,r6,lsl #9
+@ 	mov	r0,#18
+@ 	mov	r1,#0
+@ 	bl	SDCommand
+@ 	mov	r6,#0
+@ beginforj_ReadSector:
+@ 	cmp	r6,r5
+@ 	bge	endforj_ReadSector
+@ 	mov	r0,r4
+@ 	add	r0,r0,r6,lsl #9 
+@ 	bl	sd_data_read_s
+@ 	add	r6,r6,#1
+@ 	b	beginforj_ReadSector
+@ endforj_ReadSector:
+@ 	mov	r0,#12
+@ 	mov	r1,#0
+@ 	mov	r2,#0
+@ 	bl	SDCommand
+@ 	bl	get_resp
+@ 	mov	r0,#0x10
+@ 	bl	send_clk
+@ 	mov	r0,#1
+@ 	ldmfd   r13!,{r4-r6,r15}
+@ @	bx	r14
 @----------end ReadSector------------
 
 @-----------void get_resp(void)-------------------
@@ -730,6 +761,81 @@ flash_write_end:
 	ldmfd   r13!,{r4-r5,r15}
 @------------end sc_rumble_flash_write--------
 
+.extern isInserted @define in C
+
+.ALIGN
+.global call_starup
+.CODE 32
+call_starup:
+PUSH            {LR}
+LDR             R3, =0xFFFFA55A
+MOV             R2, #0x9FFFFFF
+MOV             R1, #3
+STRH            R3, [R2,#-1]
+SUB             SP, SP, #4
+STRH            R3, [R2,#-1]
+STRH            R1, [R2,#-1]
+STRH            R1, [R2,#-1]
+BL              isInserted
+ADD             SP, SP, #4
+POP             {LR}
+BX              LR
+@ End of function call_starup
+
+
+.global clearStatus_s
+.CODE 32
+.ALIGN
+
+clearStatus_s:
+LDR             R3, =0x90E0000
+LDRH            R2, [R3]
+TST             R2, #0x80
+BEQ             loc_1F4
+MOV             R1, #0
+B               loc_1E0
+
+loc_1D4:
+LDR             R3, =0x989680
+CMP             R1, R3
+BEQ             loc_1F4
+
+loc_1E0:
+LDR             R3, =0x90E0000
+ADD             R1, R1, #1
+LDRH            R2, [R3]
+TST             R2, #0x80
+BNE             loc_1D4
+
+loc_1F4:
+LDR             R2, =0x98C0000
+LDRH            R3, [R2]
+ANDS            R3, R3, #0x50 @ 'P'
+MOVNE           R0, #1
+BXNE            LR
+LDR             R1, =0x989680
+MOV             R0, R3
+B               loc_21C
+
+loc_214:
+CMP             R0, R1
+BEQ             loc_240
+
+loc_21C:
+LDRH            R3, [R2]
+ADD             R0, R0, #1
+ANDS            R3, R3, #0x50 @ 'P'
+BEQ             loc_214
+LDR             R3, =0x98967F
+CMP             R0, R3
+MOVGT           R0, #0
+MOVLE           R0, #1
+BX              LR
+
+loc_240:
+MOV             R0, R3
+BX              LR
+@ End of function clearStatus
 @-----------------------------------------------
     .END
 

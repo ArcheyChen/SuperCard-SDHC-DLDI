@@ -36,7 +36,7 @@ void WriteSector(u16 *buff, u32 sector, u32 writenum)
     return;
 }
 
-void ReadSector(uint16_t *buff, uint32_t sector, uint8_t readnum)
+void ReadSector(uint16_t *buff, uint32_t sector, uint32_t readnum)
 {
     auto param = isSDHC ? sector : (sector << 9);
     SDCommand(0x12,param); // R0 = 0x12, R1 = 0, R2 as calculated above

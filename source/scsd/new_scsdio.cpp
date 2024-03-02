@@ -7,6 +7,8 @@ uint8_t _SD_CRC7(uint8_t *pBuf, int len);
 bool _SCSD_readData (void* buffer);
 
 void _SD_CRC16 (u8* buff, int buffLength, u8* crc16buff);
+
+uint64_t sdio_crc16_4bit_checksum(uint32_t *data, uint32_t num_words);
 void WriteSector(u16 *buff, u32 sector, u32 writenum)
 {
     u8 crc16[8];//??为什么是8个
@@ -19,7 +21,8 @@ void WriteSector(u16 *buff, u32 sector, u32 writenum)
     send_clk(0x10);
     for (u32 j = 0; j < writenum; j++)
     {
-        _SD_CRC16((u8 *)((u32)buff + j * 512), 512, (u8 *)crc16);
+        // _SD_CRC16((u8 *)((u32)buff + j * 512), 512, (u8 *)crc16);
+        *(u64*)crc16 = sdio_crc16_4bit_checksum((u32 *)((u32)buff + j * 512),512/sizeof(u32));
         sd_data_write((u16 *)((u32)buff + j * 512), (u16 *)crc16);
         send_clk(0x10);
     }
@@ -233,77 +236,55 @@ bool MemoryCard_IsInserted(void) {
     uint16_t status = *(vu16*)sd_comadd; // 读取状态寄存器的值
     return (status & 0x300)==0; 
 }
-void _SD_CRC16 (u8* buff, int buffLength, u8* crc16buff) {
-	u32 a, b, c, d;
-	u32 bitPattern = 0x80808080;	// 分成4部分，每部分8bit
-	const u32 crcConst = 0x1021;	// r8
-	u8 dataByte = 0;	// r2
 
-	a = 0;	// r3
-	b = 0;	// r4
-	c = 0;	// r5
-	d = 0;	// r6
-	
-	
-	
-	while (buffLength--){
-        dataByte = *buff++;
-		a = a << 1;
-		if ( a & 0x10000) a ^= crcConst;
-		if (dataByte & (bitPattern >> 24)) a ^= crcConst;
-		
-		b = b << 1;
-		if (b & 0x10000) b ^= crcConst;
-		if (dataByte & (bitPattern >> 25)) b ^= crcConst;
-	
-		c = c << 1;
-		if (c & 0x10000) c ^= crcConst;
-		if (dataByte & (bitPattern >> 26)) c ^= crcConst;
-		
-		d = d << 1;
-		if (d & 0x10000) d ^= crcConst;
-		if (dataByte & (bitPattern >> 27)) d ^= crcConst;
-		
-		bitPattern = (bitPattern >> 4) | (bitPattern << 28);
-        
-		a = a << 1;
-		if ( a & 0x10000) a ^= crcConst;
-		if (dataByte & (bitPattern >> 24)) a ^= crcConst;
-		
-		b = b << 1;
-		if (b & 0x10000) b ^= crcConst;
-		if (dataByte & (bitPattern >> 25)) b ^= crcConst;
-	
-		c = c << 1;
-		if (c & 0x10000) c ^= crcConst;
-		if (dataByte & (bitPattern >> 26)) c ^= crcConst;
-		
-		d = d << 1;
-		if (d & 0x10000) d ^= crcConst;
-		if (dataByte & (bitPattern >> 27)) d ^= crcConst;
-		
-		bitPattern = (bitPattern >> 4) | (bitPattern << 28);
-	} 
-	
-	int count = 8;	// buf是8 byte
-	while(count--){
-		bitPattern = 0;
-		if (a & 0x8000) bitPattern |= (1<<7);
-		if (b & 0x8000) bitPattern |= (1<<6);
-		if (c & 0x8000) bitPattern |= (1<<5);
-		if (d & 0x8000) bitPattern |= (1<<4);
+uint64_t inline calSingleCRC16(uint64_t crc,uint32_t data_in){
+    // Shift out 8 bits for each line
+    uint32_t data_out = crc >> 32;
+    crc <<= 32;
 
-		if (a & 0x4000) bitPattern |= (1<<3);
-		if (b & 0x4000) bitPattern |= (1<<2);
-		if (c & 0x4000) bitPattern |= (1<<1);
-		if (d & 0x4000) bitPattern |= (1<<0);
-		a = a << 2;
-		b = b << 2;
-		c = c << 2;
-		d = d << 2;
-		
-		*crc16buff++ = bitPattern;
-	}
-	
-	return;
+    // XOR outgoing data to itself with 4 bit delay
+    data_out ^= (data_out >> 16);
+
+    // XOR incoming data to outgoing data with 4 bit delay
+    data_out ^= (data_in >> 16);
+
+    // XOR outgoing and incoming data to accumulator at each tap
+    uint64_t xorred = data_out ^ data_in;
+    crc ^= xorred;
+    crc ^= xorred << (5 * 4);
+    crc ^= xorred << (12 * 4);
+    return crc;
+}
+
+uint32_t loadBigEndU32_u8(u8* &dataBuf){
+    u32 data;
+    data = (*dataBuf++) << 24;
+    data |= (*dataBuf++) << 16;
+    data |= (*dataBuf++) << 8;
+    data |= (*dataBuf++);
+    return data;
+}
+uint64_t sdio_crc16_4bit_checksum(uint32_t *dataBuf, uint32_t num_words)
+{
+    uint64_t crc = 0;
+    if((uintptr_t)dataBuf & 3){//u8 align
+        uint8_t *data = (u8*)dataBuf;
+        uint8_t *end = (u8*)(dataBuf + num_words);
+        while (data < end)
+        {
+            uint32_t data_in = loadBigEndU32_u8(data);
+            crc = calSingleCRC16(crc,data_in);
+        }
+    }else{
+        uint32_t *data = dataBuf;
+        uint32_t *end = dataBuf + num_words;
+        while (data < end)
+        {
+            uint32_t data_in = __builtin_bswap32(*data++);
+            crc = calSingleCRC16(crc,data_in);
+        }
+    }
+
+
+    return __builtin_bswap64(crc);
 }

@@ -9,7 +9,7 @@ bool _SCSD_readData (void* buffer);
 void _SD_CRC16 (u8* buff, int buffLength, u8* crc16buff);
 void WriteSector(u16 *buff, u32 sector, u32 writenum)
 {
-    u32 crc16[5];
+    u8 crc16[8];//??为什么是8个
     sc_mode(en_sdcard);
     sc_sdcard_reset();
     // auto param = isSDHC ? sector : (sector << 9);
@@ -237,21 +237,17 @@ void _SD_CRC16 (u8* buff, int buffLength, u8* crc16buff) {
 	u32 a, b, c, d;
 	u32 bitPattern = 0x80808080;	// 分成4部分，每部分8bit
 	const u32 crcConst = 0x1021;	// r8
-	u32 dataByte = 0;	// r2
+	u8 dataByte = 0;	// r2
 
 	a = 0;	// r3
 	b = 0;	// r4
 	c = 0;	// r5
 	d = 0;	// r6
 	
-	buffLength = buffLength << 3;
-	// buffLength = buffLength * 8;
 	
 	
-	do {
-		if (bitPattern & 0x80) 
-			dataByte = *buff++;
-		
+	while (buffLength--){
+        dataByte = *buff++;
 		a = a << 1;
 		if ( a & 0x10000) a ^= crcConst;
 		if (dataByte & (bitPattern >> 24)) a ^= crcConst;
@@ -269,7 +265,25 @@ void _SD_CRC16 (u8* buff, int buffLength, u8* crc16buff) {
 		if (dataByte & (bitPattern >> 27)) d ^= crcConst;
 		
 		bitPattern = (bitPattern >> 4) | (bitPattern << 28);
-	} while (buffLength-=4);
+        
+		a = a << 1;
+		if ( a & 0x10000) a ^= crcConst;
+		if (dataByte & (bitPattern >> 24)) a ^= crcConst;
+		
+		b = b << 1;
+		if (b & 0x10000) b ^= crcConst;
+		if (dataByte & (bitPattern >> 25)) b ^= crcConst;
+	
+		c = c << 1;
+		if (c & 0x10000) c ^= crcConst;
+		if (dataByte & (bitPattern >> 26)) c ^= crcConst;
+		
+		d = d << 1;
+		if (d & 0x10000) d ^= crcConst;
+		if (dataByte & (bitPattern >> 27)) d ^= crcConst;
+		
+		bitPattern = (bitPattern >> 4) | (bitPattern << 28);
+	} 
 	
 	int count = 8;	// buf是8 byte
 	while(count--){

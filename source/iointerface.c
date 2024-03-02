@@ -43,6 +43,17 @@
 #endif
 
 #include "scsd/new_scsdio.h"
+
+const char build_info[]=
+"SuperCard-SDHC-DLDI Ver 1.0 The 'Moon Eclipse' "
+"[https://github.com/ArcheyChen/SuperCard-SDHC-DLDI]"
+"Author: Ausar Date:2024/03/03\n"
+"Supports:1.SD init 2.SDHC 3.unaligned r/w 4.compatiable with nds-bootstrap"
+"Please Keep this info";
+const char* get_build_info(){
+    return build_info;
+}
+
 bool startup(void) {
     sc_mode(en_sdram + en_sdcard);
     return MemoryCard_IsInserted() && init_sd();
@@ -70,3 +81,5 @@ bool writeSectors (u32 sector, u32 numSectors, void* buffer) {
 bool shutdown(void) {
     return true;
 }
+
+

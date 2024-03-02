@@ -360,6 +360,7 @@ void cmd_and_response_drop (u32 respLenth,u8* responseBuffer, u8 command, u32 da
 
 
 bool init_sd(){
+    sc_sdcard_reset();//do we really need that?
 	send_clk (NUM_STARTUP_CLOCKS);
     SDCommand (GO_IDLE_STATE, 0);
 	send_clk (NUM_STARTUP_CLOCKS);
@@ -399,7 +400,7 @@ bool init_sd(){
 		}
 	}
     // The card's name, as assigned by the manufacturer
-	cmd_and_response (17,responseBuffer, ALL_SEND_CID, 0);
+	cmd_and_response_drop (17,responseBuffer, ALL_SEND_CID, 0);
 	// Get a new address
 	for (i = 0; i < MAX_STARTUP_TRIES ; i++) {
 		cmd_and_response (6,responseBuffer, SEND_RELATIVE_ADDR, 0);

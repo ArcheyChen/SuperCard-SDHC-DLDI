@@ -45,7 +45,7 @@
 #include "scsd/new_scsdio.h"
 bool startup(void) {
     sc_mode(en_sdram + en_sdcard);
-    return MemoryCard_IsInserted();
+    return MemoryCard_IsInserted() && init_sd();
 }
 
 bool isInserted (void) {
@@ -56,12 +56,14 @@ bool clearStatus (void) {
     return true;
 }
 bool readSectors (u32 sector, u32 numSectors, void* buffer) {
+    sc_mode(en_sdram + en_sdcard);
     ReadSector(buffer,sector,numSectors);
     return true;
 }
 
 
 bool writeSectors (u32 sector, u32 numSectors, void* buffer) {
+    sc_mode(en_sdram + en_sdcard);
     WriteSector(buffer,sector,numSectors);
     return true;
 }

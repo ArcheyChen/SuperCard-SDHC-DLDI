@@ -1,7 +1,7 @@
 #include "new_scsdio.h"
 #include <cstdio>
 
-extern bool isSDHC;
+bool isSDHC;
 
 uint8_t _SD_CRC7(uint8_t *pBuf, int len);
 bool _SCSD_readData (void* buffer);
@@ -9,14 +9,15 @@ bool _SCSD_readData (void* buffer);
 void _SD_CRC16 (u8* buff, int buffLength, u8* crc16buff);
 
 uint64_t sdio_crc16_4bit_checksum(uint32_t *data, uint32_t num_words);
+
+void get_resp_drop(int dropBytes=6);
 void WriteSector(u16 *buff, u32 sector, u32 writenum)
 {
     u8 crc16[8];//??为什么是8个
     sc_mode(en_sdcard);
     sc_sdcard_reset();
-    // auto param = isSDHC ? sector : (sector << 9);
-    auto param = (sector << 9);
-    SDCommand(25, 0, param);
+    auto param = isSDHC ? sector : (sector << 9);
+    SDCommand(25, param);
     get_resp_drop();
     send_clk(0x10);
     for (u32 j = 0; j < writenum; j++)
@@ -26,7 +27,7 @@ void WriteSector(u16 *buff, u32 sector, u32 writenum)
         sd_data_write((u16 *)((u32)buff + j * 512), (u16 *)crc16);
         send_clk(0x10);
     }
-    SDCommand(12, 0, 0);
+    SDCommand(12, 0);
     get_resp_drop();
     send_clk(0x10);
     vu16 *wait_busy = (vu16 *)sd_dataadd;
@@ -37,13 +38,14 @@ void WriteSector(u16 *buff, u32 sector, u32 writenum)
 
 void ReadSector(uint16_t *buff, uint32_t sector, uint8_t readnum)
 {
-    SDCommand(0x12, 0, sector << 9); // R0 = 0x12, R1 = 0, R2 as calculated above
+    auto param = isSDHC ? sector : (sector << 9);
+    SDCommand(0x12,param); // R0 = 0x12, R1 = 0, R2 as calculated above
     for(int i=0;i<readnum;i++)
     {
         _SCSD_readData(buff); // Add R6, left shifted by 9, to R4 before casting
         buff += 512 / 2;
     }
-    SDCommand(0xC, 0, 0); // Command to presumably stop reading
+    SDCommand(0xC, 0); // Command to presumably stop reading
     get_resp_drop();           // Get response from SD card
     send_clk(0x10);       // Send clock signal
 }
@@ -119,6 +121,11 @@ void sc_sdcard_reset(void)
     vu16 *reset_addr = (vu16 *)sd_reset;
     *reset_addr = 0xFFFF;
 }
+void sc_sdcard_enable_lite(void)//what was that?
+{
+    vu16 *reset_addr = (vu16 *)sd_reset;
+    *reset_addr = 0;
+}
 
 void send_clk(u32 num)
 {
@@ -130,7 +137,7 @@ void send_clk(u32 num)
 }
 
 #define REG_SCSD_CMD (*(vu16 *)(0x09800000))
-void SDCommand(u8 command, uint8_t num, u32 argument)
+void SDCommand(u8 command, u32 argument)
 {
     u8 databuff[6];
     u8 *tempDataPtr = databuff;
@@ -162,9 +169,9 @@ void SDCommand(u8 command, uint8_t num, u32 argument)
         // 本质上是将U16的写合并成U32的写
     }
 }
-void get_resp_drop()
+void get_resp_drop(int byteNum)
 {
-    int byteNum = 6 + 1; // 6resp + 8 clocks
+    byteNum++; // +  8 clocks
 
     // Wait for the card to be non-busy
     vu16 *const cmd_addr_u16 = (vu16 *)(0x09800000);
@@ -287,4 +294,146 @@ uint64_t sdio_crc16_4bit_checksum(uint32_t *dataBuf, uint32_t num_words)
 
 
     return __builtin_bswap64(crc);
+}
+bool get_resp (u8* dest, u32 length) {
+	u32 i;	
+	int numBits = length * 8;
+	
+	i = BUSY_WAIT_TIMEOUT;
+	while (((REG_SCSD_CMD & 0x01) != 0) && (--i));
+	if (i == 0) {
+		return false;
+	}
+	
+	// The first bit is always 0
+	vu16* const cmd_addr_u16 = (vu16*)(0x09800000);
+	vu32* const cmd_addr_u32 = (vu32*)(0x09800000);
+
+	u32 partial_result = ((*cmd_addr_u16) & 0x01) << 16 ;
+	numBits-=2;
+	// Read the remaining bits in the response.
+	// It's always most significant bit first
+	const u32 mask_2bit = 0x10001;
+	while (numBits) {
+		numBits-=2;
+		partial_result = (partial_result << 2) | ((*cmd_addr_u32) & mask_2bit);
+		if ((numBits & 0x7) == 0) {
+			//_1_3_5_7 _0_2_4_6 
+			*dest++ = ((partial_result >> 16) | (partial_result<<1));
+			partial_result = 0;
+		}
+	}
+	for (i = 0; i < 4; i++) {//8clock
+		*cmd_addr_u32;
+	}
+	return true;
+}
+#define NUM_STARTUP_CLOCKS 100
+#define GO_IDLE_STATE 0
+#define CMD8 8
+#define APP_CMD 55
+#define CMD58 58
+#define SD_APP_OP_COND 41
+#define MAX_STARTUP_TRIES 1000
+#define SD_OCR_VALUE 0x00030000
+//2.8V to 3.0V
+#define ALL_SEND_CID 2
+#define SEND_RELATIVE_ADDR 3
+#define SD_STATE_STBY 3
+#define SEND_CSD 9
+#define SELECT_CARD 7
+#define SET_BUS_WIDTH 6
+#define SET_BLOCKLEN 16
+#define RESPONSE_TIMEOUT 256
+#define SEND_STATUS 13
+#define SD_STATE_TRAN 4
+#define READY_FOR_DATA 1
+u32 relativeCardAddress = 0;
+bool cmd_and_response (u32 respLenth,u8* responseBuffer, u8 command, u32 data) {
+	SDCommand (command, data);
+	return get_resp (responseBuffer, respLenth);
+}
+void cmd_and_response_drop (u32 respLenth,u8* responseBuffer, u8 command, u32 data) {
+	SDCommand (command, data);
+	get_resp_drop (respLenth);
+}
+
+
+bool init_sd(){
+	send_clk (NUM_STARTUP_CLOCKS);
+    SDCommand (GO_IDLE_STATE, 0);
+	send_clk (NUM_STARTUP_CLOCKS);
+    int i;
+
+	u8 responseBuffer[17] = {0};
+    isSDHC = false;
+    bool cmd8Response = cmd_and_response(17,responseBuffer, CMD8, 0x1AA);
+    if (cmd8Response && responseBuffer[0] == CMD8 && responseBuffer[1] == 0 && responseBuffer[2] == 0 && responseBuffer[3] == 0x1 && responseBuffer[4] == 0xAA) {
+        isSDHC = true;//might be
+    }
+    for (i = 0; i < MAX_STARTUP_TRIES; i++) {
+        cmd_and_response(6,responseBuffer, APP_CMD, 0);
+		if (responseBuffer[0] != APP_CMD) {	
+			return false;
+		}
+
+		u32 arg = SD_OCR_VALUE;
+		if (isSDHC) {
+			arg |= (1<<30); // Set HCS bit,Supports SDHC
+			arg |= (1<<28); //Max performance
+		}
+
+		if (cmd_and_response(6,responseBuffer, SD_APP_OP_COND, arg) &&//ACMD41
+			((responseBuffer[1] & (1<<7)) != 0)/*Busy:0b:initing 1b:init completed*/) {
+			break; // Card is ready
+		}
+	}
+
+	if (i >= MAX_STARTUP_TRIES) {
+		return false;
+	}
+    if (isSDHC) {
+		cmd_and_response(6,responseBuffer, CMD58, 0);
+		if ((responseBuffer[1] & (1<<6)) == 0) {//Card Capacity Status (CCS)
+			isSDHC = false;// Further processing of OCR can be done here if needed is SDHC
+		}
+	}
+    // The card's name, as assigned by the manufacturer
+	cmd_and_response (17,responseBuffer, ALL_SEND_CID, 0);
+	// Get a new address
+	for (i = 0; i < MAX_STARTUP_TRIES ; i++) {
+		cmd_and_response (6,responseBuffer, SEND_RELATIVE_ADDR, 0);
+		relativeCardAddress = (responseBuffer[1] << 24) | (responseBuffer[2] << 16);
+		if ((responseBuffer[3] & 0x1e) != (SD_STATE_STBY << 1)) {
+			break;
+		}
+	}
+ 	if (i >= MAX_STARTUP_TRIES) {
+		return false;
+	}
+
+	// Some cards won't go to higher speeds unless they think you checked their capabilities
+	cmd_and_response_drop (17,responseBuffer, SEND_CSD, relativeCardAddress);
+ 
+	// Only this card should respond to all future commands
+	cmd_and_response_drop (6,responseBuffer, SELECT_CARD, relativeCardAddress);
+ 
+    // Set a 4 bit data bus
+    cmd_and_response_drop (6,responseBuffer, APP_CMD, relativeCardAddress);
+    cmd_and_response_drop (6,responseBuffer, SET_BUS_WIDTH, 2); // 4-bit mode.
+	
+
+	// Use 512 byte blocks
+	cmd_and_response_drop (6,responseBuffer, SET_BLOCKLEN, 512); // 512 byte blocks
+	
+	// Wait until card is ready for data
+	i = 0;
+	do {
+		if (i >= RESPONSE_TIMEOUT) {
+			return false;
+		}
+		i++;
+	} while (!cmd_and_response (6,responseBuffer, SEND_STATUS, relativeCardAddress) && ((responseBuffer[3] & 0x1f) != ((SD_STATE_TRAN << 1) | READY_FOR_DATA)));
+ 
+	return true;
 }

@@ -22,6 +22,9 @@ and it's not open sourced, and can't support SDHC which mean you stuck at 2GB of
 
 ## Credits
 chishm & libdev : for original code, but was broken on latest toolchains [https://github.com/devkitPro/libgba/blob/master/src/disc_io/io_scsd.c]
+
 supercard team: for the official code, but the readSector function has some bug [http://down.supercard.sc/download/supercard_io.zip]
+
 Moonlight dldi:  I use ida pro to disassemble the scsd_moon.dldi, and get the working readSector function[https://www.chishm.com/DLDI/downloads/scsd_moon.dldi]
+
 profi200: told me some info about faster crc16 codes, which improves the writing speed

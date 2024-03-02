@@ -45,11 +45,11 @@
 #include "scsd/new_scsdio.h"
 bool startup(void) {
     sc_mode(en_sdram + en_sdcard);
-    return sc_MemoryCard_IsInserted();
+    return MemoryCard_IsInserted();
 }
 
 bool isInserted (void) {
-    return sc_MemoryCard_IsInserted();
+    return MemoryCard_IsInserted();
 }
 
 bool clearStatus (void) {

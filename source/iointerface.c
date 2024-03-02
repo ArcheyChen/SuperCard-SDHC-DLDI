@@ -52,7 +52,6 @@ bool isInserted (void) {
     return sc_MemoryCard_IsInserted();
 }
 
-// extern  bool clearStatus (void);
 bool clearStatus (void) {
     return true;
 }

@@ -14,15 +14,12 @@ extern "C" {
 #define en_write 4
 #define en_rumble 8
 #define en_rumble_user_flash 1
-extern void sc_ReadSector (u16 *buff,u32 sector,u8 readnum);
-extern void sc_WriteSector (u16 *buff,u32 sector,u8 writenum);
-extern void sc_InitSCMode (void);
+// extern void sc_InitSCMode (void);
 extern bool sc_MemoryCard_IsInserted (void);
 // extern void sc_sdcard_reset(void);
 
 extern void get_resp(void);
 extern void sd_crc16_s(u16* buff,u16 num,u16* crc16buff);
-extern u8 sd_crc7_s(u16* buff,u16 num);
 
 extern void sd_data_read_s(u16 *buff);
 extern void get_resp(void);

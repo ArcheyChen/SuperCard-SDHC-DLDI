@@ -9,6 +9,14 @@ bool _SCSD_readData (void* buffer);
 void _SD_CRC16 (u8* buff, int buffLength, u8* crc16buff);
 
 uint64_t sdio_crc16_4bit_checksum(uint32_t *data, uint32_t num_words);
+inline uint16_t setFastCNT(uint16_t originData){
+/*  2-3   32-pin GBA Slot ROM 1st Access Time (0-3 = 10, 8, 6, 18 cycles)
+    4     32-pin GBA Slot ROM 2nd Access Time (0-1 = 6, 4 cycles)*/
+    const uint16_t mask = ~(7<<2);//~ 000011100, clear bit 2-3 + 4
+    const uint16_t setVal = ((2) << 2) | (1<<4);
+    return (originData & mask) | setVal;
+}
+vu16* const EXMEMCNT_ADDR = (vu16*)0x4000204;
 
 void get_resp_drop(int dropBytes=6);
 void WriteSector(u16 *buff, u32 sector, u32 writenum)
@@ -38,6 +46,8 @@ void WriteSector(u16 *buff, u32 sector, u32 writenum)
 
 void ReadSector(uint16_t *buff, uint32_t sector, uint32_t readnum)
 {
+    u16 originMemStat = *EXMEMCNT_ADDR;
+    *EXMEMCNT_ADDR = setFastCNT(originMemStat);   
     auto param = isSDHC ? sector : (sector << 9);
     SDCommand(0x12,param); // R0 = 0x12, R1 = 0, R2 as calculated above
     for(u32 i=0;i<readnum;i++)
@@ -48,6 +58,7 @@ void ReadSector(uint16_t *buff, uint32_t sector, uint32_t readnum)
     SDCommand(0xC, 0); // Command to presumably stop reading
     get_resp_drop();           // Get response from SD card
     send_clk(0x10);       // Send clock signal
+    *EXMEMCNT_ADDR = originMemStat;
 }
 
 #define BUSY_WAIT_TIMEOUT 500000
@@ -55,6 +66,8 @@ void ReadSector(uint16_t *buff, uint32_t sector, uint32_t readnum)
 
 void sd_data_write(u16 *buff, u16 *crc16buff)
 {
+    u16 originMemStat = *EXMEMCNT_ADDR;
+    *EXMEMCNT_ADDR = setFastCNT(originMemStat);   
     vu16 *const wait_busy = (vu16 *)sd_dataadd;
     vu16 *const data_write_u16 = (vu16 *)sd_dataadd;
     vu32 *const data_write_u32 = (vu32 *)sd_dataadd;
@@ -106,6 +119,7 @@ void sd_data_write(u16 *buff, u16 *crc16buff)
     *data_write_u16 = 0xFF; // end bit
     while (((*wait_busy) & SCSD_STS_BUSY))
         ; // Note:这个部分与上个部分是不一样的
+    *EXMEMCNT_ADDR = originMemStat;
 }
 void sc_mode(u16 mode)
 {
@@ -225,10 +239,39 @@ bool  __attribute__((optimize("Ofast")))  _SCSD_readData (void* buffer) {
 			*buff_u8++ = (u8)(temp >> 8);
 		}
 	} else {
-		while(i--) {
-			*REG_SCSD_DATAREAD_32_ADDR;
-			*buff++ = (*REG_SCSD_DATAREAD_32_ADDR) >> 16; 
+        u32 r0,r1,r2,r3,r4,r5,r6,r7;
+        const u32 maskHi = 0xFFFF0000;
+        u32* buff_u32 = (u32*)buff;
+        while(i) {
+            i-=4;
+            r0 = *(REG_SCSD_DATAREAD_32_ADDR + 0);
+            r1 = *(REG_SCSD_DATAREAD_32_ADDR + 1);
+            r2 = *(REG_SCSD_DATAREAD_32_ADDR + 2);
+            r3 = *(REG_SCSD_DATAREAD_32_ADDR + 3);
+            r4 = *(REG_SCSD_DATAREAD_32_ADDR + 4);
+            r5 = *(REG_SCSD_DATAREAD_32_ADDR + 5);
+            r6 = *(REG_SCSD_DATAREAD_32_ADDR + 6);
+            r7 = *(REG_SCSD_DATAREAD_32_ADDR + 7);
+
+            r3 &= maskHi;
+            r3 |= (r1 >> 16);
+
+            r7 &= maskHi;
+            r7 |= (r5 >> 16);
+            *buff_u32++ = r3;
+            *buff_u32++ = r7;
 		}
+		// while(i) {
+        //     i-=4;
+		// 	*(REG_SCSD_DATAREAD_32_ADDR);
+		// 	*buff++ = (*(REG_SCSD_DATAREAD_32_ADDR+1)) >> 16; 
+		// 	*(REG_SCSD_DATAREAD_32_ADDR+2);
+		// 	*buff++ = (*(REG_SCSD_DATAREAD_32_ADDR+3)) >> 16; 
+		// 	*(REG_SCSD_DATAREAD_32_ADDR+4);
+		// 	*buff++ = (*(REG_SCSD_DATAREAD_32_ADDR+5)) >> 16; 
+		// 	*(REG_SCSD_DATAREAD_32_ADDR+6);
+		// 	*buff++ = (*(REG_SCSD_DATAREAD_32_ADDR+7)) >> 16; 
+		// }
 	}
 
 	for (i = 0; i < 8; i++) {

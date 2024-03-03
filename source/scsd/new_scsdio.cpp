@@ -43,14 +43,14 @@ void WriteSector(u8 *buff, u32 sector, u32 writenum)
     return;
 }
 
-void ReadSector(uint16_t *buff, uint32_t sector, uint32_t readnum)
+void ReadSector(uint8_t *buff, uint32_t sector, uint32_t readnum)
 {
     u16 originMemStat = *EXMEMCNT_ADDR;
     *EXMEMCNT_ADDR = setFastCNT(originMemStat);   
     auto param = isSDHC ? sector : (sector << 9);
     SDCommand(0x12,param); // R0 = 0x12, R1 = 0, R2 as calculated above
-    auto buffer_end = buff + readnum*(512/2);
-    for(;buff<buffer_end;buff+=512/2)
+    
+    for(auto buffer_end = buff + readnum*(512);buff<buffer_end;buff+=512)
     {
         _SCSD_readData(buff); // Add R6, left shifted by 9, to R4 before casting
     }

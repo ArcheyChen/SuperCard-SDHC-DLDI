@@ -30,7 +30,7 @@ void sc_sdcard_reset(void);
 void SDCommand(u8 command,u32 sector);
 void sd_data_write(u16 *buff,u16* crc16buff);
 void WriteSector(u8 *buff,u32 sector,u32 writenum);
-void ReadSector (u16 *buff,u32 sector,u32 readnum);
+void ReadSector (u8 *buff,u32 sector,u32 readnum);
 
 const static uint8_t crc7_lut[] =
     {0x0, 0x12, 0x24, 0x36, 0x48, 0x5A, 0x6C, 0x7E, 0x90, 0x82, 0xB4, 0xA6, 0xD8, 0xCA, 0xFC, 0xEE,

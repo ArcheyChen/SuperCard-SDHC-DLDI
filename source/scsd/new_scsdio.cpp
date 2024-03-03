@@ -4,7 +4,7 @@
 bool isSDHC;
 
 uint8_t _SD_CRC7(uint8_t *pBuf, int len);
-bool _SCSD_readData (void* buffer);
+extern "C" bool _SCSD_readData (void* buffer);
 
 void _SD_CRC16 (u8* buff, int buffLength, u8* crc16buff);
 
@@ -220,7 +220,6 @@ vu16* const REG_SCSD_DATAREAD_ADDR	=	((vu16*)(0x09100000));
 vu32* const REG_SCSD_DATAREAD_32_ADDR	=	((vu32*)(0x09100000));
 bool  __attribute__((optimize("Ofast")))  _SCSD_readData (void* buffer) {
 	u8* buff_u8 = (u8*)buffer;
-	u16* buff = (u16*)buffer;
 	int i;
 	
 	i = BUSY_WAIT_TIMEOUT;
@@ -239,28 +238,21 @@ bool  __attribute__((optimize("Ofast")))  _SCSD_readData (void* buffer) {
 			*buff_u8++ = (u8)(temp >> 8);
 		}
 	} else {
-        u32 r0,r1,r2,r3,r4,r5,r6,r7;
         const u32 maskHi = 0xFFFF0000;
-        u32* buff_u32 = (u32*)buff;
-        while(i) {
-            i-=4;
-            r0 = *(REG_SCSD_DATAREAD_32_ADDR + 0);
-            r1 = *(REG_SCSD_DATAREAD_32_ADDR + 1);
-            r2 = *(REG_SCSD_DATAREAD_32_ADDR + 2);
-            r3 = *(REG_SCSD_DATAREAD_32_ADDR + 3);
-            r4 = *(REG_SCSD_DATAREAD_32_ADDR + 4);
-            r5 = *(REG_SCSD_DATAREAD_32_ADDR + 5);
-            r6 = *(REG_SCSD_DATAREAD_32_ADDR + 6);
-            r7 = *(REG_SCSD_DATAREAD_32_ADDR + 7);
-
-            r3 &= maskHi;
-            r3 |= (r1 >> 16);
-
-            r7 &= maskHi;
-            r7 |= (r5 >> 16);
-            *buff_u32++ = r3;
-            *buff_u32++ = r7;
-		}
+        asm volatile(
+        "1: \n"
+            "ldmia  %2, {r0-r7} \n"   // 从REG_SCSD_DATAREAD_32_ADDR读取8个32位值到r0-r7
+            "and    r3, r3, %3 \n"     // r3 &= maskHi
+            "and    r7, r7, %3 \n"     // r7 &= maskHi
+            "orr    r3, r3, r1, lsr #16 \n"     // r3 |= (r1 >> 16)
+            "orr    r7, r7, r5, lsr #16 \n"     // r7 |= (r5 >> 16)
+            "stmia  %0!, {r3,r7} \n"  // 将r3和r7的值存储到buff_u32指向的位置，并将buff_u32增加8字节
+            "cmp    %1, %0 \n"
+            "bgt    1b \n"              // 如果i > 0，则继续循环
+            :
+            : "r" (buffer), "r" ((u32)buffer+512), "r" ((u32)REG_SCSD_DATAREAD_32_ADDR), "r" (maskHi)
+            : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "memory"
+        );
 		// while(i) {
         //     i-=4;
 		// 	*(REG_SCSD_DATAREAD_32_ADDR);

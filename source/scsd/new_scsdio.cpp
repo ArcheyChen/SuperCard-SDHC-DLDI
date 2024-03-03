@@ -18,7 +18,7 @@ inline uint16_t setFastCNT(uint16_t originData){
 }
 vu16* const EXMEMCNT_ADDR = (vu16*)0x4000204;
 
-void get_resp_drop(int dropBytes=6);
+extern "C" void get_resp_drop(int dropBytes=6);
 void WriteSector(u16 *buff, u32 sector, u32 writenum)
 {
     u8 crc16[8];//??为什么是8个
@@ -183,7 +183,7 @@ void SDCommand(u8 command, u32 argument)
         // 本质上是将U16的写合并成U32的写
     }
 }
-void get_resp_drop(int byteNum)
+void  get_resp_drop(int byteNum)
 {
     byteNum++; // +  8 clocks
 
@@ -193,13 +193,23 @@ void get_resp_drop(int byteNum)
     while ((((*cmd_addr_u16) & 0x01) != 0));
 
     // 实际上，当跳出这个循环的时候，已经读了一个bit了，后续会多读一个bit，但是这是抛弃的rsp,因此多读一个bit也就是多一个时钟周期罢了
-    while (byteNum--)
-    {
-        *cmd_addr_u32;
-        *cmd_addr_u32;
-        *cmd_addr_u32;
-        *cmd_addr_u32;
-    }
+    
+   asm volatile(
+        "1: \n\t"
+            "ldmia %0, {r0-r3} \n\t"   
+            "subs %1, %1, #1 \n\t"   // byteNum--
+            "bne 1b \n\t"            // 如果byteNum不为0，则继续循环
+        : // 没有输出
+        : "r" (cmd_addr_u32), "r" (byteNum) // 输入
+        : "r0", "r1", "r2", "r3", "cc" // 破坏列表
+    );
+    // while (byteNum--)
+    // {
+    //     *cmd_addr_u32;
+    //     *cmd_addr_u32;
+    //     *cmd_addr_u32;
+    //     *cmd_addr_u32;
+    // }
 }
 
 inline uint8_t CRC7_one(uint8_t crcIn, uint8_t data)
@@ -228,9 +238,9 @@ bool  __attribute__((optimize("Ofast")))  _SCSD_readData (void* buffer) {
 		return false;
 	}
 
-	i=256;
 	if ((u32)buff_u8 & 0x01) {
 		u32 temp;
+	    i=256;
 		while(i--) {
 			*REG_SCSD_DATAREAD_32_ADDR;
 			temp = (*REG_SCSD_DATAREAD_32_ADDR) >> 16;
@@ -266,10 +276,17 @@ bool  __attribute__((optimize("Ofast")))  _SCSD_readData (void* buffer) {
 		// }
 	}
 
-	for (i = 0; i < 8; i++) {
-		*REG_SCSD_DATAREAD_32_ADDR;
-	}
-	*REG_SCSD_DATAREAD_ADDR;
+    asm volatile(
+            "ldmia  %0, {r0-r7} \n"   // drop the crc16
+            "ldrh   r1, [%0] \n"   // end
+            :
+            : "r" ((u32)REG_SCSD_DATAREAD_32_ADDR)
+            : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"
+        );
+	// for (i = 0; i < 8; i++) {
+	// 	*REG_SCSD_DATAREAD_32_ADDR;
+	// }
+	// *REG_SCSD_DATAREAD_ADDR;
 
 	return true;
 }

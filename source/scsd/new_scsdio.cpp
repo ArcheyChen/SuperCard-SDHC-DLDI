@@ -255,7 +255,49 @@ bool  _SCSD_readData (void* buffer) {
 		return false;
 	}
 
-	if ((u32)buff_u8 & 0x01) {
+	if (((u32)buff_u8 & 0x03) == 0){//u32 aligned
+        const u32 maskHi = 0xFFFF0000;
+        asm volatile(
+        "1: \n"
+            "ldmia  %2, {r0-r7} \n"   // 从REG_SCSD_DATAREAD_32_ADDR读取8个32位值到r0-r7
+            "and    r3, r3, %3 \n"     // r3 &= maskHi
+            "and    r7, r7, %3 \n"     // r7 &= maskHi
+            "orr    r3, r3, r1, lsr #16 \n"     // r3 |= (r1 >> 16)
+            "orr    r7, r7, r5, lsr #16 \n"     // r7 |= (r5 >> 16)
+            "stmia  %0!, {r3,r7} \n"  // 将r3和r7的值存储到buff_u32指向的位置，并将buff_u32增加8字节
+            "cmp    %0, %1 \n"
+            "blt    1b \n"              // if buffer<bufferEnd continue;
+            :
+            : "r" (buffer), "r" ((u32)buffer+512), "r" (REG_SCSD_DATAREAD_32_ADDR), "r" (maskHi)
+            : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "memory","cc"
+        );
+	    // i=256;
+        // u16* buff = (u16*)buffer;
+		// while(i--) {
+
+		// 	*(REG_SCSD_DATAREAD_32_ADDR);
+		// 	*buff++ = (*(REG_SCSD_DATAREAD_32_ADDR)) >> 16; 
+		// }
+	}else 
+    if (((u32)buff_u8 & 0x01) == 0) {//u16 aligned
+		asm volatile(
+        "2: \n"
+            "ldmia  %2, {r0-r7} \n"   // 从REG_SCSD_DATAREAD_32_ADDR读取8个32位值到r0-r7
+            "lsr r1, r1, #16\n"
+            "strh r1, [%0], #2\n"
+            "lsr r3, r3, #16\n"
+            "strh r3, [%0], #2\n"
+            "lsr r5, r5, #16\n"
+            "strh r5, [%0], #2\n"
+            "lsr r7, r7, #16\n"
+            "strh r7, [%0], #2\n"   
+            "cmp    %0, %1 \n"
+            "blt    2b \n"              // if buffer<bufferEnd continue;
+            :
+            : "r" (buffer), "r" ((u32)buffer+512), "r" (REG_SCSD_DATAREAD_32_ADDR)
+            : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "memory","cc"
+        );
+	} else {
 		u32 temp;
 	    i=256;
 		while(i--) {
@@ -264,45 +306,6 @@ bool  _SCSD_readData (void* buffer) {
 			*buff_u8++ = (u8)temp;
 			*buff_u8++ = (u8)(temp >> 8);
 		}
-	} else {
-        const u32 maskHi = 0xFFFF0000;
-        asm volatile(
-        "1: \n"
-            "sub %1, %1, #4 \n"
-            "ldmia  %2, {r0-r7} \n"   // 从REG_SCSD_DATAREAD_32_ADDR读取8个32位值到r0-r7
-            // "and    r3, r3, %3 \n"     // r3 &= maskHi
-            // "and    r7, r7, %3 \n"     // r7 &= maskHi
-            // "orr    r3, r3, r1, lsr #16 \n"     // r3 |= (r1 >> 16)
-            // "orr    r7, r7, r5, lsr #16 \n"     // r7 |= (r5 >> 16)
-            // "stmia  %0!, {r3,r7} \n"  // 将r3和r7的值存储到buff_u32指向的位置，并将buff_u32增加8字节
-            "lsr r1, r1, #16\n"
-            "strh r1, [%0], #2\n"
-            "lsr r3, r3, #16\n"
-            "strh r3, [%0], #2\n"
-            "lsr r5, r5, #16\n"
-            "strh r5, [%0], #2\n"
-            "lsr r7, r7, #16\n"
-            "strh r7, [%0], #2\n"
-            "cmp    %1, #0 \n"
-            "bgt    1b \n"              // 如果i > 0，则继续循环
-            :
-            : "r" (buffer), "r" (256), "r" (REG_SCSD_DATAREAD_32_ADDR), "r" (maskHi)
-            : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "memory","cc"
-        );
-	    // i=256;
-        // u16* buff = (u16*)buffer;
-		// while(i) {
-        //     i-=4;
-
-		// 	*(REG_SCSD_DATAREAD_32_ADDR);
-		// 	*buff++ = (*(REG_SCSD_DATAREAD_32_ADDR+1)) >> 16; 
-		// 	*(REG_SCSD_DATAREAD_32_ADDR+2);
-		// 	*buff++ = (*(REG_SCSD_DATAREAD_32_ADDR+3)) >> 16; 
-		// 	*(REG_SCSD_DATAREAD_32_ADDR+4);
-		// 	*buff++ = (*(REG_SCSD_DATAREAD_32_ADDR+5)) >> 16; 
-		// 	*(REG_SCSD_DATAREAD_32_ADDR+6);
-		// 	*buff++ = (*(REG_SCSD_DATAREAD_32_ADDR+7)) >> 16; 
-		// }
 	}
 
     asm volatile(

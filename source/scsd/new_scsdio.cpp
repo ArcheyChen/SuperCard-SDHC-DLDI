@@ -334,7 +334,7 @@ bool get_resp (u8* dest, u32 length) {
 #define APP_CMD 55
 #define CMD58 58
 #define SD_APP_OP_COND 41
-#define MAX_STARTUP_TRIES 1000
+#define MAX_STARTUP_TRIES 5000
 #define SD_OCR_VALUE 0x00030000
 //2.8V to 3.0V
 #define ALL_SEND_CID 2
@@ -428,13 +428,5 @@ bool init_sd(){
 	cmd_and_response_drop (6,responseBuffer, SET_BLOCKLEN, 512); // 512 byte blocks
 	
 	// Wait until card is ready for data
-	i = 0;
-	do {
-		if (i >= RESPONSE_TIMEOUT) {
-			return false;
-		}
-		i++;
-	} while (!cmd_and_response (6,responseBuffer, SEND_STATUS, relativeCardAddress) && ((responseBuffer[3] & 0x1f) != ((SD_STATE_TRAN << 1) | READY_FOR_DATA)));
- 
 	return true;
 }

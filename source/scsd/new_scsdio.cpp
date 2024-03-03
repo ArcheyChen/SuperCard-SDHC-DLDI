@@ -129,12 +129,12 @@ void sc_mode(u16 mode)
     *sc_mode_addr = mode;
 }
 
-void sc_sdcard_reset(void)
+inline void sc_sdcard_reset(void)
 {
     vu16 *reset_addr = (vu16 *)sd_reset;
     *reset_addr = 0xFFFF;
 }
-void sc_sdcard_enable_lite(void)//what was that?
+inline void sc_sdcard_enable_lite(void)//what was that?
 {
     vu16 *reset_addr = (vu16 *)sd_reset;
     *reset_addr = 0;
@@ -200,7 +200,7 @@ void SDCommand(u8 command, u32 argument)
     //     // 本质上是将U16的写合并成U32的写
     // }
 }
-void  get_resp_drop(int byteNum)
+void inline  get_resp_drop(int byteNum)
 {
     byteNum++; // +  8 clocks
 
@@ -212,10 +212,10 @@ void  get_resp_drop(int byteNum)
     // 实际上，当跳出这个循环的时候，已经读了一个bit了，后续会多读一个bit，但是这是抛弃的rsp,因此多读一个bit也就是多一个时钟周期罢了
     
    asm volatile(
-        "1: \n\t"
+        "2: \n\t"
             "ldmia %0, {r0-r3} \n\t"   
             "subs %1, %1, #1 \n\t"   // byteNum--
-            "bne 1b \n\t"            // 如果byteNum不为0，则继续循环
+            "bne 2b \n\t"            // 如果byteNum不为0，则继续循环
         : // 没有输出
         : "r" (cmd_addr_u32), "r" (byteNum) // 输入
         : "r0", "r1", "r2", "r3", "cc" // 破坏列表
@@ -234,7 +234,7 @@ inline uint8_t CRC7_one(uint8_t crcIn, uint8_t data)
     crcIn ^= data;
     return crc7_lut[crcIn];
 }
-uint8_t _SD_CRC7(uint8_t *pBuf, int len)
+inline uint8_t _SD_CRC7(uint8_t *pBuf, int len)
 {
     uint8_t crc = 0;
     while (len--)
@@ -245,7 +245,7 @@ uint8_t _SD_CRC7(uint8_t *pBuf, int len)
 
 vu16* const REG_SCSD_DATAREAD_ADDR	=	((vu16*)(0x09100000));
 vu32* const REG_SCSD_DATAREAD_32_ADDR	=	((vu32*)(0x09100000));
-bool  __attribute__((optimize("Ofast")))  _SCSD_readData (void* buffer) {
+bool  _SCSD_readData (void* buffer) {
 	u8* buff_u8 = (u8*)buffer;
 	int i;
 	
@@ -268,20 +268,32 @@ bool  __attribute__((optimize("Ofast")))  _SCSD_readData (void* buffer) {
         const u32 maskHi = 0xFFFF0000;
         asm volatile(
         "1: \n"
+            "sub %1, %1, #4 \n"
             "ldmia  %2, {r0-r7} \n"   // 从REG_SCSD_DATAREAD_32_ADDR读取8个32位值到r0-r7
-            "and    r3, r3, %3 \n"     // r3 &= maskHi
-            "and    r7, r7, %3 \n"     // r7 &= maskHi
-            "orr    r3, r3, r1, lsr #16 \n"     // r3 |= (r1 >> 16)
-            "orr    r7, r7, r5, lsr #16 \n"     // r7 |= (r5 >> 16)
-            "stmia  %0!, {r3,r7} \n"  // 将r3和r7的值存储到buff_u32指向的位置，并将buff_u32增加8字节
-            "cmp    %1, %0 \n"
+            // "and    r3, r3, %3 \n"     // r3 &= maskHi
+            // "and    r7, r7, %3 \n"     // r7 &= maskHi
+            // "orr    r3, r3, r1, lsr #16 \n"     // r3 |= (r1 >> 16)
+            // "orr    r7, r7, r5, lsr #16 \n"     // r7 |= (r5 >> 16)
+            // "stmia  %0!, {r3,r7} \n"  // 将r3和r7的值存储到buff_u32指向的位置，并将buff_u32增加8字节
+            "lsr r1, r1, #16\n"
+            "strh r1, [%0], #2\n"
+            "lsr r3, r3, #16\n"
+            "strh r3, [%0], #2\n"
+            "lsr r5, r5, #16\n"
+            "strh r5, [%0], #2\n"
+            "lsr r7, r7, #16\n"
+            "strh r7, [%0], #2\n"
+            "cmp    %1, #0 \n"
             "bgt    1b \n"              // 如果i > 0，则继续循环
             :
-            : "r" (buffer), "r" ((u32)buffer+512), "r" ((u32)REG_SCSD_DATAREAD_32_ADDR), "r" (maskHi)
+            : "r" (buffer), "r" (256), "r" (REG_SCSD_DATAREAD_32_ADDR), "r" (maskHi)
             : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "memory","cc"
         );
+	    // i=256;
+        // u16* buff = (u16*)buffer;
 		// while(i) {
         //     i-=4;
+
 		// 	*(REG_SCSD_DATAREAD_32_ADDR);
 		// 	*buff++ = (*(REG_SCSD_DATAREAD_32_ADDR+1)) >> 16; 
 		// 	*(REG_SCSD_DATAREAD_32_ADDR+2);

@@ -19,7 +19,7 @@ inline uint16_t setFastCNT(uint16_t originData){
 vu16* const EXMEMCNT_ADDR = (vu16*)0x4000204;
 
 extern "C" void get_resp_drop(int dropBytes=6);
-void WriteSector(u16 *buff, u32 sector, u32 writenum)
+void WriteSector(u8 *buff, u32 sector, u32 writenum)
 {
     u8 crc16[8];//??为什么是8个
     sc_mode(en_sdcard);
@@ -28,11 +28,10 @@ void WriteSector(u16 *buff, u32 sector, u32 writenum)
     SDCommand(25, param);
     get_resp_drop();
     send_clk(0x10);
-    for (u32 j = 0; j < writenum; j++)
+    for (auto buffEnd = buff + writenum * 512 ; buff < buffEnd; buff += 512)
     {
-        // _SD_CRC16((u8 *)((u32)buff + j * 512), 512, (u8 *)crc16);
-        *(u64*)crc16 = sdio_crc16_4bit_checksum((u32 *)((u32)buff + j * 512),512/sizeof(u32));
-        sd_data_write((u16 *)((u32)buff + j * 512), (u16 *)crc16);
+        *(u64*)crc16 = sdio_crc16_4bit_checksum((u32 *)(buff),512/sizeof(u32));
+        sd_data_write((u16 *)(buff), (u16 *)crc16);
         send_clk(0x10);
     }
     SDCommand(12, 0);
@@ -50,10 +49,10 @@ void ReadSector(uint16_t *buff, uint32_t sector, uint32_t readnum)
     *EXMEMCNT_ADDR = setFastCNT(originMemStat);   
     auto param = isSDHC ? sector : (sector << 9);
     SDCommand(0x12,param); // R0 = 0x12, R1 = 0, R2 as calculated above
-    for(u32 i=0;i<readnum;i++)
+    auto buffer_end = buff + readnum*(512/2);
+    for(;buff<buffer_end;buff+=512/2)
     {
         _SCSD_readData(buff); // Add R6, left shifted by 9, to R4 before casting
-        buff += 512 / 2;
     }
     SDCommand(0xC, 0); // Command to presumably stop reading
     get_resp_drop();           // Get response from SD card
@@ -170,18 +169,36 @@ void SDCommand(u8 command, u32 argument)
     tempDataPtr = databuff;
     volatile uint32_t *send_command_addr = (volatile uint32_t *)(0x09800000); // 假设sd_comadd也是数据写入地址
 
-    int length = 6;
-    while (length--)
-    {
-        uint32_t data = *tempDataPtr++;
-        data = data | (data << 17);
-        *send_command_addr = data;
-        *send_command_addr = data << 2;
-        *send_command_addr = data << 4;
-        *send_command_addr = data << 6;
-        // sd_dataadd[0] ~ [3]至少目前证明都是镜像的，可以随便用，可以用stmia来加速
-        // 本质上是将U16的写合并成U32的写
-    }
+    #define SEND_ONE_COMMAND_BYTE \
+        "ldrb r0, [%0], #1 \n"         /* uint32_t data = *tempDataPtr++; */ \
+        "orr  r0, r0, r0, lsl #17 \n"  /* data = data | (data << 17); */ \
+        "mov  r1, r0, lsl #2 \n"       \
+        "mov  r2, r0, lsl #4 \n"       \
+        "mov  r3, r0, lsl #6 \n"       \
+        "stmia %1, {r0-r3}\n"
+    asm volatile(//发送6次
+        SEND_ONE_COMMAND_BYTE
+        SEND_ONE_COMMAND_BYTE
+        SEND_ONE_COMMAND_BYTE
+        SEND_ONE_COMMAND_BYTE
+        SEND_ONE_COMMAND_BYTE
+        SEND_ONE_COMMAND_BYTE
+        : // 没有输出
+        : "r"((u32)databuff),"r"((u32)send_command_addr)
+        : "r0", "r1", "r2", "r3"// 破坏列表
+    );
+    // int length = 6;
+    // while (length--)
+    // {
+    //     uint32_t data = *tempDataPtr++;
+    //     data = data | (data << 17);
+    //     *send_command_addr = data;
+    //     *send_command_addr = data << 2;
+    //     *send_command_addr = data << 4;
+    //     *send_command_addr = data << 6;
+    //     // sd_dataadd[0] ~ [3]至少目前证明都是镜像的，可以随便用，可以用stmia来加速
+    //     // 本质上是将U16的写合并成U32的写
+    // }
 }
 void  get_resp_drop(int byteNum)
 {
@@ -261,7 +278,7 @@ bool  __attribute__((optimize("Ofast")))  _SCSD_readData (void* buffer) {
             "bgt    1b \n"              // 如果i > 0，则继续循环
             :
             : "r" (buffer), "r" ((u32)buffer+512), "r" ((u32)REG_SCSD_DATAREAD_32_ADDR), "r" (maskHi)
-            : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "memory"
+            : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "memory","cc"
         );
 		// while(i) {
         //     i-=4;

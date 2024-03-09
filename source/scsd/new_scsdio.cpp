@@ -264,41 +264,49 @@ bool  _SCSD_readData (void* buffer) {
             "orr    r7, r7, r5, lsr #16 \n"     \
             "stmia  %0!, {r3,r7} \n"  /*将r3和r7的值存储到buff_u32指向的位置，并将buff_u32增加8字节*/
 
-	if (((u32)buff_u8 & 0x03) == 0){//u32 aligned
-        asm volatile(
-        "1: \n"
-            LOAD_U32_ALIGNED_2WORDS
-            LOAD_U32_ALIGNED_2WORDS
-            "cmp    %0, %1 \n"
-            "blt    1b \n"              // if buffer<bufferEnd continue;
-            :
-            : "r" (buffer), "r" ((u32)buffer+512), "r" (REG_SCSD_DATAREAD_32_ADDR), "r" (maskHi)
-            : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "memory","cc"
-        );
-	    // i=256;
+
+	// if (((u32)buff_u8 & 0x03) == 0){//u32 aligned
+    //     asm volatile(
+    //     "1: \n"
+    //         LOAD_U32_ALIGNED_2WORDS
+    //         LOAD_U32_ALIGNED_2WORDS
+    //         "cmp    %0, %1 \n"
+    //         "blt    1b \n"              // if buffer<bufferEnd continue;
+    //         :
+    //         : "r" (buffer), "r" ((u32)buffer+512), "r" (REG_SCSD_DATAREAD_32_ADDR), "r" (maskHi)
+    //         : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "memory","cc"
+    //     );
+	//     // i=256;
+    //     // u16* buff = (u16*)buffer;
+	// 	// while(i--) {
+
+	// 	// 	*(REG_SCSD_DATAREAD_32_ADDR);
+	// 	// 	*buff++ = (*(REG_SCSD_DATAREAD_32_ADDR)) >> 16; 
+	// 	// }
+	// }else 
+    if ((((u32)buff_u8 & 0x01) == 0)) {//u16 aligned
+        // i=256;
         // u16* buff = (u16*)buffer;
 		// while(i--) {
 
 		// 	*(REG_SCSD_DATAREAD_32_ADDR);
 		// 	*buff++ = (*(REG_SCSD_DATAREAD_32_ADDR)) >> 16; 
 		// }
-	}else 
-    if ((((u32)buff_u8 & 0x01) == 0)) {//u16 aligned
+        // *(REG_SCSD_DATAREAD_32_ADDR);
+        // *(u16*)buffer = (*(REG_SCSD_DATAREAD_32_ADDR)) >> 16; 
+        // buffer +
 		asm volatile(
         "2: \n"
-            "ldmia  %2, {r0-r5} \n"   // 从REG_SCSD_DATAREAD_32_ADDR读取8个32位值到r0-r7
+            "ldmia  %2, {r0-r7} \n"   // 从REG_SCSD_DATAREAD_32_ADDR读取8个32位值到r0-r7
             "lsr r1, r1, #16\n"
             "strh r1, [%0], #2\n"       //u16
-            
-            "and    r5, r5, %3 \n"     // r3 &= maskHi
-            "orr    r5, r5, r3, lsr #16 \n"     // r3 |= (r1 >> 16)
-            "str   r5, [%0], #4\n"      //u32
-
-            LOAD_U32_ALIGNED_2WORDS
-
-            "ldmia  %2, {r6,r7} \n"   // 从REG_SCSD_DATAREAD_32_ADDR读取8个32位值到r0-r7
+            "lsr r3, r3, #16\n"
+            "strh r3, [%0], #2\n"       //u16
+            "lsr r5, r5, #16\n"
+            "strh r5, [%0], #2\n"       //u16
             "lsr r7, r7, #16\n"
             "strh r7, [%0], #2\n"       //u16
+            
 
             "cmp    %0, %1 \n"
             "blt    2b \n"              // if buffer<bufferEnd continue;
@@ -306,7 +314,8 @@ bool  _SCSD_readData (void* buffer) {
             : "r" (buffer), "r" ((u32)buffer+512), "r" (REG_SCSD_DATAREAD_32_ADDR), "r" (maskHi)
             : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "memory","cc"
         );
-	} else {
+	} else 
+    {
 		u32 temp;
 	    i=256;
 		while(i--) {

@@ -250,7 +250,7 @@ bool  _SCSD_readData (void* buffer) {
 	int i;
 	
 	i = BUSY_WAIT_TIMEOUT;
-	while (((*REG_SCSD_DATAREAD_ADDR) & SCSD_STS_BUSY) && (--i));
+	while (((*REG_SCSD_DATAREAD_ADDR) & SCSD_STS_BUSY));
 	if (i == 0) {
 		return false;
 	}

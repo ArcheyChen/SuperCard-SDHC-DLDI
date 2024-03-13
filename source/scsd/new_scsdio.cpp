@@ -425,7 +425,7 @@ bool get_resp (u8* dest, u32 length) {
 	}
 	return true;
 }
-#define NUM_STARTUP_CLOCKS 100
+#define NUM_STARTUP_CLOCKS 30000
 #define GO_IDLE_STATE 0
 #define CMD8 8
 #define APP_CMD 55
@@ -475,27 +475,26 @@ bool init_sd(){
 			return false;
 		}
 
-		u32 arg = SD_OCR_VALUE;
-		if (isSDHC) {
-			arg |= (1<<30); // Set HCS bit,Supports SDHC
-			arg |= (1<<28); //Max performance
-		}
+		// u32 arg = SD_OCR_VALUE;
+		u32 arg = 0;
+        arg |= (1<<28); //Max performance
+        arg |= (1<<20); //3.3v
+        arg |= (1<<30); // Set HCS bit,Supports SDHC
 
 		if (cmd_and_response(6,responseBuffer, SD_APP_OP_COND, arg) &&//ACMD41
 			((responseBuffer[1] & (1<<7)) != 0)/*Busy:0b:initing 1b:init completed*/) {
+            bool CCS = responseBuffer[1] & (1<<6);//0b:SDSC  1b:SDHC/SDXC
+            if(!CCS)
+                isSDHC = false;
 			break; // Card is ready
 		}
+	    send_clk (NUM_STARTUP_CLOCKS);
 	}
 
 	if (i >= MAX_STARTUP_TRIES) {
 		return false;
 	}
-    if (isSDHC) {
-		cmd_and_response(6,responseBuffer, CMD58, 0);
-		if ((responseBuffer[1] & (1<<6)) == 0) {//Card Capacity Status (CCS)
-			isSDHC = false;// Further processing of OCR can be done here if needed is SDHC
-		}
-	}
+
     // The card's name, as assigned by the manufacturer
 	cmd_and_response_drop (17,responseBuffer, ALL_SEND_CID, 0);
 	// Get a new address

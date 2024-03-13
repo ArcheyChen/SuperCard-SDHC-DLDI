@@ -520,10 +520,5 @@ bool init_sd(){
     cmd_and_response_drop (6,responseBuffer, APP_CMD, relativeCardAddress);
     cmd_and_response_drop (6,responseBuffer, SET_BUS_WIDTH, 2); // 4-bit mode.
 	
-
-	// Use 512 byte blocks
-	cmd_and_response_drop (6,responseBuffer, SET_BLOCKLEN, 512); // 512 byte blocks
-	
-	// Wait until card is ready for data
 	return true;
 }

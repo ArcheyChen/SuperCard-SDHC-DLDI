@@ -479,12 +479,13 @@ bool init_sd(){
 		u32 arg = 0;
         arg |= (1<<28); //Max performance
         arg |= (1<<20); //3.3v
-        arg |= (1<<30); // Set HCS bit,Supports SDHC
+        if(isSDHC)
+            arg |= (1<<30); // Set HCS bit,Supports SDHC
 
 		if (cmd_and_response(6,responseBuffer, SD_APP_OP_COND, arg) &&//ACMD41
 			((responseBuffer[1] & (1<<7)) != 0)/*Busy:0b:initing 1b:init completed*/) {
             bool CCS = responseBuffer[1] & (1<<6);//0b:SDSC  1b:SDHC/SDXC
-            if(!CCS)
+            if(!CCS && isSDHC)
                 isSDHC = false;
 			break; // Card is ready
 		}

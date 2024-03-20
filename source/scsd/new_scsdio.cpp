@@ -29,7 +29,7 @@ void WriteSector(u8 *buff, u32 sector, u32 writenum)
         SDCommand(24, param);
         get_resp_drop();
         crc16 = sdio_crc16_4bit_checksum((u32 *)(buff),512/sizeof(u32));
-        sd_data_write((u16 *)(buff), (u16 *)(&crc16));
+        sd_data_write((u16 *)(buff), (u8 *)(&crc16));
     }else
     {
         SDCommand(25, param);
@@ -37,7 +37,7 @@ void WriteSector(u8 *buff, u32 sector, u32 writenum)
         for (auto buffEnd = buff + writenum * 512 ; buff < buffEnd; buff += 512)
         {
             crc16 = sdio_crc16_4bit_checksum((u32 *)(buff),512/sizeof(u32));
-            sd_data_write((u16 *)(buff), (u16 *)(&crc16));
+            sd_data_write((u16 *)(buff), (u8 *)(&crc16));
             send_clk(0x10);
         }
         SDCommand(12, 0);
@@ -76,7 +76,7 @@ void ReadSector(uint8_t *buff, uint32_t sector, uint32_t readnum)
 #define BUSY_WAIT_TIMEOUT 500000
 #define SCSD_STS_BUSY 0x100
 
-void sd_data_write(u16 *buff, u16 *crc16buff)
+void sd_data_write(u16 *buff, u8 *crc16buff)
 {
     u16 originMemStat = *EXMEMCNT_ADDR;
     *EXMEMCNT_ADDR = setFastCNT(originMemStat);   
@@ -95,13 +95,13 @@ void sd_data_write(u16 *buff, u16 *crc16buff)
             *data_write_u32 = data;
             *data_write_u32 = (data >> 8);
         };
-    auto writeU32 = [data_write_u32](uint32_t data)//lambda Function
-        {
-            *data_write_u32 = data;
-            *data_write_u32 = (data >> 8);
-            *data_write_u32 = (data >> 16);
-            *data_write_u32 = (data >> 24);//居然能用
-        };
+    // auto writeU32 = [data_write_u32](uint32_t data)//lambda Function
+    //     {
+    //         *data_write_u32 = data;
+    //         *data_write_u32 = (data >> 8);
+    //         *data_write_u32 = (data >> 16);
+    //         *data_write_u32 = (data >> 24);//居然能用,但是好像镜像只镜像到ADDR + 4
+    //     };
 
 #define WRITE_U16 \
     "ldrh r0, [%0], #2\n" \
@@ -112,9 +112,10 @@ void sd_data_write(u16 *buff, u16 *crc16buff)
     "lsr r1, r0, #8\n"     \
     "lsr r2, r0, #16\n"    \
     "lsr r3, r0, #24\n"    \
-    "stmia %1, {r0-r3}\n"
+    "stmia %1, {r0-r1}\n"   \
+    "stmia %1, {r2-r3}\n"
 
-    if((u32)buff & 1){//unaligned
+    if((u32)buff & 3){//unaligned
         u8* buff_u8 = (u8*)buff;
         u16 byteHI;
         u16 byteLo;
@@ -124,26 +125,26 @@ void sd_data_write(u16 *buff, u16 *crc16buff)
             writeU16((byteHI << 8) | byteLo);
         }
     }
-    // else if((u32)buff & 2){//u16 aligned
-    //     asm volatile(
-    //         WRITE_U16
-    //         WRITE_U32
-    //     "1:\n"
-    //         WRITE_U32
-    //         WRITE_U32
-    //         "cmp %0, %2\n"
-    //         "blt 1b\n"
-    //         WRITE_U16
-    //         : // 没有输出
-    //         : "r"((u32)buff),"r"((u32)data_write_u32),"r"(((u32)buff) + 510/*512-2*/)
-    //         : "r0", "r1", "r2", "r3", "cc"// 破坏列表
-    //     );
-    // }
+    else if((u32)buff & 2){//u16 aligned
+        asm volatile(
+            WRITE_U16
+            WRITE_U32
+        "1:\n"
+            WRITE_U32
+            WRITE_U32
+            "cmp %0, %2\n"
+            "blt 1b\n"
+            WRITE_U16
+            : // 没有输出
+            : "r"((u32)buff),"r"((u32)data_write_u32),"r"(((u32)buff) + 510/*512-2*/)
+            : "r0", "r1", "r2", "r3", "cc"// 破坏列表
+        );
+    }
     else{//u32 aligned
         asm volatile(
         "2:\n"
-            WRITE_U16
-            WRITE_U16
+            WRITE_U32
+            WRITE_U32
             "cmp %0, %2\n"
             "blt 2b"
             : // 没有输出
@@ -162,19 +163,37 @@ void sd_data_write(u16 *buff, u16 *crc16buff)
     
     if ((u32)crc16buff & 1)
     {   
-        u8* crc_u8 = (u8*)crc16buff;
         u16 byteHI;
         u16 byteLo;
         for (int i = 0; i < 4; i ++){
-            byteLo = *crc_u8++;
-            byteHI = *crc_u8++;
+            byteLo = *crc16buff++;
+            byteHI = *crc16buff++;
             writeU16((byteHI << 8) | byteLo);
         }
-    }else{
-        for (int i = 0; i < 4; i++)
-        {
-            writeU16(*crc16buff++);
-        }
+    }
+    else if ((u32)crc16buff & 2){
+        asm volatile(
+            WRITE_U16
+            WRITE_U16
+            WRITE_U16
+            WRITE_U16
+            : // 没有输出
+            : "r"((u32)crc16buff),"r"((u32)data_write_u32)
+            : "r0", "r1", "r2", "r3", "cc"// 破坏列表
+        );
+    }
+    else{
+        asm volatile(
+            WRITE_U32
+            WRITE_U32
+            : // 没有输出
+            : "r"((u32)crc16buff),"r"((u32)data_write_u32)
+            : "r0", "r1", "r2", "r3", "cc"// 破坏列表
+        );
+        // for (int i = 0; i < 4; i++)
+        // {
+        //     writeU16(*crc16buff++);
+        // }
     }
     *data_write_u16 = 0xFF; // end bit
     while (((*wait_busy) & SCSD_STS_BUSY))

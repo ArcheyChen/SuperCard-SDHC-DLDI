@@ -30,7 +30,8 @@ void WriteSector(u8 *buff, u32 sector, u32 writenum)
         get_resp_drop();
         crc16 = sdio_crc16_4bit_checksum((u32 *)(buff),512/sizeof(u32));
         sd_data_write((u16 *)(buff), (u16 *)(&crc16));
-    }else{
+    }else
+    {
         SDCommand(25, param);
         get_resp_drop();
         for (auto buffEnd = buff + writenum * 512 ; buff < buffEnd; buff += 512)
@@ -123,26 +124,26 @@ void sd_data_write(u16 *buff, u16 *crc16buff)
             writeU16((byteHI << 8) | byteLo);
         }
     }
-    else if((u32)buff & 2){//u16 aligned
-        asm volatile(
-            WRITE_U16
-            WRITE_U32
-        "1:\n"
-            WRITE_U32
-            WRITE_U32
-            "cmp %0, %2\n"
-            "blt 1b\n"
-            WRITE_U16
-            : // 没有输出
-            : "r"((u32)buff),"r"((u32)data_write_u32),"r"(((u32)buff) + 510/*512-2*/)
-            : "r0", "r1", "r2", "r3", "cc"// 破坏列表
-        );
-    }
+    // else if((u32)buff & 2){//u16 aligned
+    //     asm volatile(
+    //         WRITE_U16
+    //         WRITE_U32
+    //     "1:\n"
+    //         WRITE_U32
+    //         WRITE_U32
+    //         "cmp %0, %2\n"
+    //         "blt 1b\n"
+    //         WRITE_U16
+    //         : // 没有输出
+    //         : "r"((u32)buff),"r"((u32)data_write_u32),"r"(((u32)buff) + 510/*512-2*/)
+    //         : "r0", "r1", "r2", "r3", "cc"// 破坏列表
+    //     );
+    // }
     else{//u32 aligned
         asm volatile(
         "2:\n"
-            WRITE_U32
-            WRITE_U32
+            WRITE_U16
+            WRITE_U16
             "cmp %0, %2\n"
             "blt 2b"
             : // 没有输出

@@ -94,7 +94,25 @@ void sd_data_write(u16 *buff, u16 *crc16buff)
             *data_write_u32 = data;
             *data_write_u32 = (data >> 8);
         };
-    
+    auto writeU32 = [data_write_u32](uint32_t data)//lambda Function
+        {
+            *data_write_u32 = data;
+            *data_write_u32 = (data >> 8);
+            *data_write_u32 = (data >> 16);
+            *data_write_u32 = (data >> 24);//居然能用
+        };
+
+#define WRITE_U16 \
+    "ldrh r0, [%0], #2\n" \
+    "lsr r1, r0, #8\n" \
+    "stmia %1, {r0-r1}\n"
+#define WRITE_U32 \
+    "ldr r0, [%0], #4\n"   \
+    "lsr r1, r0, #8\n"     \
+    "lsr r2, r0, #16\n"    \
+    "lsr r3, r0, #24\n"    \
+    "stmia %1, {r0-r3}\n"
+
     if((u32)buff & 1){//unaligned
         u8* buff_u8 = (u8*)buff;
         u16 byteHI;
@@ -104,10 +122,40 @@ void sd_data_write(u16 *buff, u16 *crc16buff)
             byteHI = *buff_u8++;
             writeU16((byteHI << 8) | byteLo);
         }
-    }else{
-        for (int i = 0; i < 512; i += 2){
-            writeU16(*buff++);
-        }
+    }
+    else if((u32)buff & 2){//u16 aligned
+        asm volatile(
+            WRITE_U16
+            WRITE_U32
+        "1:\n"
+            WRITE_U32
+            WRITE_U32
+            "cmp %0, %2\n"
+            "blt 1b\n"
+            WRITE_U16
+            : // 没有输出
+            : "r"((u32)buff),"r"((u32)data_write_u32),"r"(((u32)buff) + 510/*512-2*/)
+            : "r0", "r1", "r2", "r3", "cc"// 破坏列表
+        );
+    }
+    else{//u32 aligned
+        asm volatile(
+        "2:\n"
+            WRITE_U32
+            WRITE_U32
+            "cmp %0, %2\n"
+            "blt 2b"
+            : // 没有输出
+            : "r"((u32)buff),"r"((u32)data_write_u32),"r"(((u32)buff) + 512)
+            : "r0", "r1", "r2", "r3", "cc"// 破坏列表
+        );
+        // u32 *buff_u32 = (u32*)buff;
+        // for (int i = 0; i < 512; i += 4){
+        //     writeU32(*buff_u32++);
+        // }//or?
+        // for (int i = 0; i < 512; i += 2){
+        //     writeU16(*buff++);
+        // }
     }
 
     

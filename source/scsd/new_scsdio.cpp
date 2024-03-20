@@ -25,16 +25,23 @@ void WriteSector(u8 *buff, u32 sector, u32 writenum)
     sc_mode(en_sdcard);
     sc_sdcard_reset();
     auto param = isSDHC ? sector : (sector << 9);
-    SDCommand(25, param);
-    get_resp_drop();
-    for (auto buffEnd = buff + writenum * 512 ; buff < buffEnd; buff += 512)
-    {
+    if(writenum == 1){
+        SDCommand(24, param);
+        get_resp_drop();
         crc16 = sdio_crc16_4bit_checksum((u32 *)(buff),512/sizeof(u32));
         sd_data_write((u16 *)(buff), (u16 *)(&crc16));
-        send_clk(0x10);
+    }else{
+        SDCommand(25, param);
+        get_resp_drop();
+        for (auto buffEnd = buff + writenum * 512 ; buff < buffEnd; buff += 512)
+        {
+            crc16 = sdio_crc16_4bit_checksum((u32 *)(buff),512/sizeof(u32));
+            sd_data_write((u16 *)(buff), (u16 *)(&crc16));
+            send_clk(0x10);
+        }
+        SDCommand(12, 0);
+        get_resp_drop();
     }
-    SDCommand(12, 0);
-    get_resp_drop();
     send_clk(0x10);
     vu16 *wait_busy = (vu16 *)sd_dataadd;
     while (((*wait_busy) & 0x0100) == 0)
@@ -83,7 +90,7 @@ void sd_data_write(u16 *buff, u16 *crc16buff)
 
     auto writeU16 = [data_write_u32](uint32_t data)//lambda Function
         {
-            data |= (data << 20);
+            // data |= (data << 20);    //strange, it works without
             *data_write_u32 = data;
             *data_write_u32 = (data >> 8);
         };
@@ -109,7 +116,7 @@ void sd_data_write(u16 *buff, u16 *crc16buff)
         u8* crc_u8 = (u8*)crc16buff;
         u16 byteHI;
         u16 byteLo;
-        for (int i = 0; i < 512; i += 2){
+        for (int i = 0; i < 4; i ++){
             byteLo = *crc_u8++;
             byteHI = *crc_u8++;
             writeU16((byteHI << 8) | byteLo);

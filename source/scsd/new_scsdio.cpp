@@ -21,17 +21,16 @@ vu16* const EXMEMCNT_ADDR = (vu16*)0x4000204;
 extern "C" void get_resp_drop(int dropBytes=6);
 void WriteSector(u8 *buff, u32 sector, u32 writenum)
 {
-    u8 crc16[8];//??为什么是8个
+    u64 crc16;//并行4个
     sc_mode(en_sdcard);
     sc_sdcard_reset();
     auto param = isSDHC ? sector : (sector << 9);
     SDCommand(25, param);
     get_resp_drop();
-    send_clk(0x10);
     for (auto buffEnd = buff + writenum * 512 ; buff < buffEnd; buff += 512)
     {
-        *(u64*)crc16 = sdio_crc16_4bit_checksum((u32 *)(buff),512/sizeof(u32));
-        sd_data_write((u16 *)(buff), (u16 *)crc16);
+        crc16 = sdio_crc16_4bit_checksum((u32 *)(buff),512/sizeof(u32));
+        sd_data_write((u16 *)(buff), (u16 *)(&crc16));
         send_clk(0x10);
     }
     SDCommand(12, 0);
@@ -48,14 +47,20 @@ void ReadSector(uint8_t *buff, uint32_t sector, uint32_t readnum)
     u16 originMemStat = *EXMEMCNT_ADDR;
     *EXMEMCNT_ADDR = setFastCNT(originMemStat);   
     auto param = isSDHC ? sector : (sector << 9);
-    SDCommand(0x12,param); // R0 = 0x12, R1 = 0, R2 as calculated above
+    if(readnum == 1){
+        SDCommand(17, param);
+        _SCSD_readData(buff);
+    }else{
+        SDCommand(0x12,param); // R0 = 0x12, R1 = 0, R2 as calculated above
     
-    for(auto buffer_end = buff + readnum*(512);buff<buffer_end;buff+=512)
-    {
-        _SCSD_readData(buff); // Add R6, left shifted by 9, to R4 before casting
+        for(auto buffer_end = buff + readnum*(512);buff<buffer_end;buff+=512)
+        {
+            _SCSD_readData(buff); // Add R6, left shifted by 9, to R4 before casting
+        }
+        SDCommand(0xC, 0); // Command to presumably stop reading
+        get_resp_drop();           // Get response from SD card
     }
-    SDCommand(0xC, 0); // Command to presumably stop reading
-    get_resp_drop();           // Get response from SD card
+
     send_clk(0x10);       // Send clock signal
     *EXMEMCNT_ADDR = originMemStat;
 }
@@ -177,14 +182,14 @@ void SDCommand(u8 command, u32 argument)
         "mov  r3, r0, lsl #6 \n"       \
         "stmia %1, {r0-r3}\n"
     asm volatile(//发送6次
+    "1:\n"
         SEND_ONE_COMMAND_BYTE
         SEND_ONE_COMMAND_BYTE
-        SEND_ONE_COMMAND_BYTE
-        SEND_ONE_COMMAND_BYTE
-        SEND_ONE_COMMAND_BYTE
-        SEND_ONE_COMMAND_BYTE
+        "sub %2, %2, #1\n"
+        "cmp %2, #0\n"
+        "bgt 1b"
         : // 没有输出
-        : "r"((u32)databuff),"r"((u32)send_command_addr)
+        : "r"((u32)databuff),"r"((u32)send_command_addr),"r"(3)
         : "r0", "r1", "r2", "r3"// 破坏列表
     );
     // int length = 6;

@@ -240,11 +240,10 @@ void SDCommand(u8 command, u32 argument)
     "1:\n"
         SEND_ONE_COMMAND_BYTE
         SEND_ONE_COMMAND_BYTE
-        "sub %2, %2, #1\n"
-        "cmp %2, #0\n"
-        "bgt 1b"
+        "cmp %0, %2\n"
+        "blt 1b"
         : // 没有输出
-        : "r"((u32)databuff),"r"((u32)send_command_addr),"r"(3)
+        : "r"((u32)databuff),"r"((u32)send_command_addr),"r"(((u32)databuff) + 6)
         : "r0", "r1", "r2", "r3"// 破坏列表
     );
     // int length = 6;
